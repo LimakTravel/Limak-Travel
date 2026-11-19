@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Limak Travel CRM</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6fa;font-family:Arial;color:#172033}
+header{background:#102b46;color:white;padding:22px}
+header h2{margin:0}
+.container{max-width:1100px;margin:25px auto;padding:15px}
+.card{background:white;padding:22px;border-radius:12px;margin-bottom:18px;box-shadow:0 2px 12px #0000000c}
+input,select,textarea,button{width:100%;padding:13px;margin:7px 0;border:1px solid #ddd;border-radius:7px;font-size:15px}
+button{background:#147b59;color:white;border:0;font-weight:bold;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat{background:#eaf3ef;padding:18px;border-radius:9px}
+.hidden{display:none}
+table{width:100%;border-collapse:collapse}
+td,th{padding:12px;border-bottom:1px solid #eee;text-align:left}
+@media(max-width:600px){.grid,.stats{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+<h2>LIMAK TRAVEL ✈️</h2>
+<p>AI Travel CRM | İdarəetmə paneli</p>
+</header>
+
+<div class="container">
+
+<div class="card" id="login">
+<h3>CRM sisteminə giriş</h3>
+<input id="email" type="email" placeholder="E-mail">
+<input id="password" type="password" placeholder="Şifrə">
+<button onclick="login()">Daxil ol</button>
+<p id="message"></p>
+</div>
+
+<div id="dashboard" class="hidden">
+
+<button onclick="logout()">Sistemdən çıxış</button>
+
+<div class="stats">
+<div class="stat"><b>Müştərilər</b><h2 id="customers">0</h2></div>
+<div class="stat"><b>Tur sorğuları</b><h2 id="tours">0</h2></div>
+<div class="stat"><b>Aviabilet sorğuları</b><h2 id="flights">0</h2></div>
+</div>
+
+<div class="card">
+<h3>➕ Yeni müştəri sorğusu</h3>
+
+<div class="grid">
+<input id="name" placeholder="Müştərinin adı">
+<input id="instagram" placeholder="Instagram username">
+<select id="type">
+<option value="tour">Tur paketi</option>
+<option value="flight">Aviabilet</option>
+</select>
+<input id="destination" placeholder="İstiqamət">
+<input id="date" type="date">
+<input id="nights" type="number" placeholder="Gecə sayı">
+<input id="adults" type="number" value="2" placeholder="Böyüklər">
+<input id="children" type="number" value="0" placeholder="Uşaqlar">
+<input id="ages" placeholder="Uşaqların yaşları">
+</div>
+
+<textarea id="notes" placeholder="Əlavə qeydlər"></textarea>
+<button onclick="addRequest()">Sorğunu yadda saxla</button>
+<p id="result"></p>
+</div>
+
+<div class="card">
+<h3>Son müştəri sorğuları</h3>
+<div style="overflow-x:auto">
+<table>
+<thead>
+<tr><th>Müştəri</th><th>İstiqamət</th><th>Növ</th><th>Status</th></tr>
+</thead>
+<tbody id="requests"></tbody>
+</table>
+</div>
+</div>
+
+</div>
+</div>
+
+<script>
+const URL = "https://gnspdzwivszdfngdxlvs.supabase.co";
+const KEY = "sb_publishable_TxnjXZoE2i1JjdeGImBiQ__BReAVr9";
+
+const db = supabase.createClient(URL, KEY);
+
+async function login(){
+const {error} = await db.auth.signInWithPassword({
+email:document.getElementById('email').value,
+password:document.getElementById('password').value
+});
+if(error){
+document.getElementById('message').innerText=error.message;
+}else{
+showDashboard();
+}
+}
+
+async function logout(){
+await db.auth.signOut();
+location.reload();
+}
+
+async function showDashboard(){
+document.getElementById('login').classList.add('hidden');
+document.getElementById('dashboard').classList.remove('hidden');
+await loadData();
+}
+
+async function loadData(){
+const {data:customers}=await db.from('customers').select('*');
+const {data:requests}=await db.from('travel_requests').select('*').order('created_at',{ascending:false});
+
+document.getElementById('customers').innerText=customers?.length||0;
+document.getElementById('tours').innerText=requests?.filter(x=>x.request_type==='tour').length||0;
+document.getElementById('flights').innerText=requests?.filter(x=>x.request_type==='flight').length||0;
+
+document.getElementById('requests').innerHTML=(requests||[]).map(x=>`
+<tr>
+<td>${escapeHtml(x.customer_name||'Müştəri')}</td>
+<td>${escapeHtml(x.destination||'-')}</td>
+<td>${x.request_type==='tour'?'Tur':'Aviabilet'}</td>
+<td>${escapeHtml(x.status||'new')}</td>
+</tr>`).join('');
+}
+
+function escapeHtml(value){
+return String(value).replace(/[&<>"']/g,c=>({
+'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+}[c]));
+}
+
+async function addRequest(){
+const name=document.getElementById('name').value.trim();
+if(!name){alert('Müştərinin adını daxil et');return;}
+
+const {data:customer,error:customerError}=await db
+.from('customers')
+.insert({
+full_name:name,
+instagram_id:document.getElementById('instagram').value.trim()||null
+})
+.select().single();
+
+if(customerError){
+document.getElementById('result').innerText=customerError.message;
+return;
+}
+
+const {error}=await db.from('travel_requests').insert({
+customer_id:customer.id,
+customer_name:name,
+request_type:document.getElementById('type').value,
+destination:document.getElementById('destination').value,
+departure_date:document.getElementById('date').value||null,
+nights:Number(document.getElementById('nights').value)||null,
+adults:Number(document.getElementById('adults').value)||1,
+children:Number(document.getElementById('children').value)||0,
+status:'new',
+notes:document.getElementById('notes').value+
+' | Uşaq yaşları: '+document.getElementById('ages').value
+});
+
+if(error){
+document.getElementById('result').innerText=error.message;
+return;
+}
+
+document.getElementById('result').innerText='Sorğu uğurla yadda saxlanıldı!';
+await loadData();
+}
+
+db.auth.getSession().then(({data})=>{
+if(data.session)showDashboard();
+});
+</script>
+</body>
+</html>
